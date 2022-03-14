@@ -1,0 +1,11 @@
+do_train: true
+do_local: true
+epochs: 1
+gpu: 1
+data_folder: data/muc_sentence
+save_model_folder: models/
+save_model_filename: best-summarizer
+batch_size: 1
+workers: 12
+max_token_len: 512
+warmup_steps: 20
