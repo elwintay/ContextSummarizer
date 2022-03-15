@@ -1,5 +1,5 @@
 do_train: true
-do_local: true
+do_local: false
 epochs: 1
 gpu: 1
 data_folder: data/muc_sentence

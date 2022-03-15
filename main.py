@@ -1,11 +1,15 @@
 import hydra
-from omegaconf import OmegaConf 
+from omegaconf import OmegaConf
+from clearml import Task, StorageManager, Dataset
 
 import pandas as pd
 from dataloader import *
 from model import *
 import pytorch_lightning as pl
 from sklearn.metrics import classification_report  
+import os
+
+Task.force_requirements_env_freeze(force=True, requirements_file='requirements.txt')
 
 @hydra.main(config_path='.', config_name="config")
 def main(cfg):
@@ -19,39 +23,34 @@ def main(cfg):
     if do_train:
 
         if do_local==False:
-
-            Task.force_requirements_env_freeze(force=True, requirements_file='requirements.txt')
+            
             task = Task.init(project_name='ContextSum', task_name='train', output_uri="s3://experiment-logging/storage/")
             task.connect(cfg_dict)
-            task.set_base_docker("nvcr.io/nvidia/pytorch:20.08-py3")
+            task.set_base_docker("nvcr.io/nvidia/pytorch:21.06-py3")
             task.execute_remotely(queue_name="compute", exit_process=True)
             logger = task.get_logger()
 
-            import pandas as pd
-            from dataloader import *
-            from model import *
-            import pytorch_lightning as pl
-            from sklearn.metrics import classification_report  
-
             #config
             clearml_cfg = task.get_parameters_as_dict()
-            epochs = clearml_cfg['General']["epochs"]
-            gpu = clearml_cfg['General']["gpu"]
+            epochs = int(clearml_cfg['General']["epochs"])
+            gpu = int(clearml_cfg['General']["gpu"])
             save_model_folder = clearml_cfg['General']['save_model_folder']
             save_model_filename = clearml_cfg['General']['save_model_filename']
-            batch_size = clearml_cfg['General']["batch_size"]
-            workers = clearml_cfg['General']["workers"]
-            max_token_len = clearml_cfg['General']["max_token_len"]
-            warmup_steps = clearml_cfg['General']["warmup_steps"]
+            batch_size = int(clearml_cfg['General']["batch_size"])
+            workers = int(clearml_cfg['General']["workers"])
+            max_token_len = int(clearml_cfg['General']["max_token_len"])
+            warmup_steps = int(clearml_cfg['General']["warmup_steps"])
 
             #data
             dataset = Dataset.get(
-                dataset_name="muc-sentence-6-fields",
+                dataset_name="muc4-sentence-6-fields",
                 dataset_project="datasets/muc4",
                 dataset_tags=["sentence-summarizer"],
-                only_completed=True,
+                only_published=True,
             )
             data_folder = dataset.get_local_copy()
+            data_folder = "{}/data/muc_sentence_6_fields".format(data_folder)
+            print(list(os.walk(data_folder)))
         
         else:
 
@@ -73,7 +72,7 @@ def main(cfg):
         data = MucDataModule(train, dev, test, workers = workers, batch_size=batch_size, max_token_len=max_token_len)
 
         #model
-        steps_per_epoch=len(train) // batch_size
+        steps_per_epoch = len(train) // batch_size
         total_training_steps = steps_per_epoch * epochs
         model = BertTransformer("bert-base-uncased", n_warmup_steps=warmup_steps, n_training_steps=total_training_steps)
         

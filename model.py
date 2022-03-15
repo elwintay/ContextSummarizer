@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from transformers import BertModel, AdamW, get_linear_schedule_with_warmup
 import pytorch_lightning as pl
-from pytorch_lightning.metrics.functional import f1
+from torchmetrics.functional import f1
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from dataloader import *
