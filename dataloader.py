@@ -3,14 +3,15 @@ import pandas as pd
 import json
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizerFast
+from transformers import BertTokenizer
 import pytorch_lightning as pl
 
 class MucDataset(Dataset):
 
-    def __init__(self, data, max_token_len: int = 512):
+    def __init__(self, data, tokenizer, max_token_len: int = 512):
         self.data = data
         self.max_token_len = max_token_len
+        self.tokenizer = tokenizer
 
     def __len__(self):
         return len(self.data)
@@ -18,13 +19,12 @@ class MucDataset(Dataset):
     def __getitem__(self, index: int):
 
         docid = self.data.loc[index,['docid']].values[0]
-        qns = self.data.loc[index,['question']].values[0]
+        qns = self.data.loc[index,['template']].values[0]
         sent = self.data.loc[index,['sentence']].values[0]
         text = "{0}[SEP]{1}".format(qns,sent)
-        label = self.data.loc[index,['label']].astype(int).values
+        label = self.data.loc[index,['What was targeted','What was used','Where','Which','Who attack','Who injured or killed']].astype(int).values
 
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
-        encoding = tokenizer.encode_plus(
+        encoding = self.tokenizer.encode_plus(
             text,
             add_special_tokens=True,
             max_length=self.max_token_len,
@@ -40,7 +40,7 @@ class MucDataset(Dataset):
 
 class MucDataModule(pl.LightningDataModule):
 
-    def __init__(self, train_df, dev_df, test_df, workers=12, batch_size=1, max_token_len=512):
+    def __init__(self, train_df, dev_df, test_df, tokenizer, workers=12, batch_size=1, max_token_len=512):
         super().__init__()
         self.batch_size = batch_size
         self.train_df = train_df
@@ -48,16 +48,20 @@ class MucDataModule(pl.LightningDataModule):
         self.test_df = test_df
         self.max_token_len = max_token_len
         self.workers = workers
+        self.tokenizer = tokenizer
 
     def setup(self, stage=None):
         
         self.train_dataset = MucDataset(self.train_df,
+                                        self.tokenizer,
                                         self.max_token_len)
         
         self.dev_dataset = MucDataset(self.dev_df,
+                                      self.tokenizer,
                                       self.max_token_len)
 
         self.test_dataset = MucDataset(self.test_df,
+                                       self.tokenizer,
                                        self.max_token_len)
 
     def train_dataloader(self):

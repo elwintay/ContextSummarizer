@@ -20,6 +20,8 @@ class DataPreprocess:
         with open(qns_path, 'r') as f:
             qns = json.load(f)
         
+        template_list = []
+        sentence_idx_list = []
         docid_list = []
         sentence_list = []
         label_list = []
@@ -36,19 +38,23 @@ class DataPreprocess:
                     else:
                         new_key = qns[event][key]
                         if template[key]==[]:
-                            for sent in sentences:
+                            for i,sent in enumerate(sentences):
+                                template_list.append(event)
                                 docid_list.append(doc['docid'])
                                 qns_list.append(new_key)
-                                sentence_list.append(sent)
+                                sentence_list.append(sent.strip())
+                                sentence_idx_list.append(i)
                                 label_list.append(0)
                         else:
                             for partial_ls in template[key]:
                                 for partial_ls_2 in partial_ls:
                                     cur_text = partial_ls_2[0]
-                                    for sent in sentences:
+                                    for i,sent in enumerate(sentences):
+                                        template_list.append(event)
                                         docid_list.append(doc['docid'])
                                         qns_list.append(new_key)
-                                        sentence_list.append(sent)
+                                        sentence_list.append(sent.strip())
+                                        sentence_idx_list.append(i)
                                         if cur_text in sent:
                                             label_list.append(1)
                                         else:
@@ -56,9 +62,17 @@ class DataPreprocess:
 
         output_df = pd.DataFrame()
         output_df['docid'] = docid_list
+        output_df['template'] = template_list
         output_df['question'] = qns_list
+        output_df['sentence_idx'] = sentence_idx_list
         output_df['sentence'] = sentence_list
         output_df['label'] = label_list
+        output_df = output_df[output_df['label']==1].reset_index(drop=True)
+        output_df = output_df.pivot_table(index=['docid','template','sentence_idx','sentence'],columns='question',values='label', aggfunc='max')
+        output_df.columns.name = None
+        output_df = output_df.reset_index()
+        output_df = output_df.fillna(0)
+
 
         output_df.to_csv(output_path, index=False)
 
