@@ -19,10 +19,10 @@ class MucDataset(Dataset):
     def __getitem__(self, index: int):
 
         docid = self.data.loc[index,['docid']].values[0]
-        qns = self.data.loc[index,['template']].values[0]
+        template = self.data.loc[index,['template']].values[0]
         sent = self.data.loc[index,['sentence']].values[0]
-        text = "{0}[SEP]{1}".format(qns,sent)
-        label = self.data.loc[index,['What was targeted','What was used','Where','Which','Who attack','Who injured or killed']].astype(int).values
+        text = "{0}[SEP]{1}".format(template,sent)
+        label = self.data.loc[index,["Where is the location?","Who was the attacker?","Which organisation?","What was targeted?","Who injured or killed?","What weapon was used?"]].astype(int).values
 
         encoding = self.tokenizer.encode_plus(
             text,
@@ -33,7 +33,7 @@ class MucDataset(Dataset):
             truncation=True,
             return_attention_mask=True,
             return_tensors='pt')
-
+        print(encoding)
         return dict(docid=docid, text=text, input_ids=encoding["input_ids"].flatten(),
                     attention_mask=encoding["attention_mask"].flatten(),
                     labels=torch.FloatTensor(label))
@@ -63,6 +63,7 @@ class MucDataModule(pl.LightningDataModule):
         self.test_dataset = MucDataset(self.test_df,
                                        self.tokenizer,
                                        self.max_token_len)
+
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset,

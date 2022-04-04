@@ -8,6 +8,7 @@ from model import *
 import pytorch_lightning as pl
 from sklearn.metrics import classification_report  
 import os
+import ast
 
 Task.force_requirements_env_freeze(force=True, requirements_file='requirements.txt')
 
@@ -43,7 +44,7 @@ def main(cfg):
 
             #data
             dataset = Dataset.get(
-                dataset_name="muc4-sentence-6-fields-v2",
+                dataset_name="muc4-sentence-6-fields-v4",
                 dataset_project="datasets/muc4",
                 dataset_tags=["sentence-summarizer"],
                 only_published=True,
@@ -90,18 +91,47 @@ def main(cfg):
         text = results['text']
         labels =  results['labels'].squeeze().tolist()
         preds =  torch.round(results['preds'].squeeze()).tolist()
-        target_names = ['What was targeted','What was used','Where','Which','Who attack','Who injured or killed']
+        target_names = ["Where is the location?","Who was the attacker?","Which organisation?","What was targeted?","Who injured or killed?","What weapon was used?"]
         print(classification_report(labels, preds, zero_division=0, target_names=target_names))
 
         #save predictions
+        test_qa = pd.read_csv("{}/test_qa.csv".format(data_folder))
+        test_qa['entity'] = test_qa['entity'].apply(lambda x: ast.literal_eval(x))
+        test_qa['text_label'] = test_qa['entity'].apply(lambda x: x['entity'] if x!={} else '')
         output_df = pd.DataFrame()
         output_df['docid'] = docid
         output_df['text'] = text
-        output_df['labels'] = labels
-        output_df['preds'] = preds
-        output_df.to_csv("output.csv",index=False)
+        pred_data = pd.DataFrame.from_records(preds)
+        pred_data.columns = target_names
+        pred_df = pd.concat([output_df,pred_data],axis=1)
+        pred_df = pd.melt(pred_df, id_vars=['docid','text'], value_vars=target_names)
+        pred_df.rename(columns={'variable':'qns', 'value':'label'}, inplace=True)
+        question_answering = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+        with open('pred.json', 'w') as outfile:
+            for id in output_df['docid'].unique():
+                doc_dict = {}
+                doc_dict['docid'] = id
+                doc_dict['gold'] = {}
+                doc_dict['pred'] = {}
+                temp_df = pred_df[pred_df['docid']==id].reset_index(drop=True)
+                temp_label = test_qa[test_qa['docid']==id].reset_index(drop=True)
+                for qns in target_names:
+                    doc_dict['pred'][qns] = []
+                    doc_dict['gold'][qns] = []
+                for i in range(len(temp_df)):
+                    if temp_df.loc[i,'label']==1:
+                        qns = temp_df.loc[i,'qns']
+                        result = question_answering(question=qns, context=temp_df.loc[i,'text'])
+                        doc_dict['pred'][qns].append(result['answer'])
+                        doc_dict['pred'][qns] = list(set(doc_dict['pred'][qns]))
+                        doc_dict['gold'][qns] += list(set(temp_label.loc[temp_label['question']==qns,'text_label'].tolist()))
+                        doc_dict['gold'][qns] = list(set(doc_dict['gold'][qns]))
+                    else:
+                        continue
+                json.dump(doc_dict, outfile)
+                outfile.write('\n')
         if do_local==False:
-            task.upload_artifact("predictions", output_df)
+            task.upload_artifact("predictions", 'pred.json')
             task.close()
 
     else:
@@ -129,7 +159,7 @@ def main(cfg):
 
             #data
             dataset = Dataset.get(
-                dataset_name="muc4-sentence-6-fields-v2",
+                dataset_name="muc4-sentence-6-fields-v4",
                 dataset_project="datasets/muc4",
                 dataset_tags=["sentence-summarizer"],
                 only_published=True,
@@ -177,18 +207,47 @@ def main(cfg):
         text = results['text']
         labels =  results['labels'].squeeze().tolist()
         preds =  torch.round(results['preds'].squeeze()).tolist()
-        target_names = ['What was targeted','What was used','Where','Which','Who attack','Who injured or killed']
+        target_names = ["Where is the location?","Who was the attacker?","Which organisation?","What was targeted?","Who injured or killed?","What weapon was used?"]
         print(classification_report(labels, preds, zero_division=0, target_names=target_names))
 
         #save predictions
+        test_qa = pd.read_csv("{}/test_qa.csv".format(data_folder))
+        test_qa['entity'] = test_qa['entity'].apply(lambda x: ast.literal_eval(x))
+        test_qa['text_label'] = test_qa['entity'].apply(lambda x: x['entity'] if x!={} else '')
         output_df = pd.DataFrame()
         output_df['docid'] = docid
         output_df['text'] = text
-        output_df['labels'] = labels
-        output_df['preds'] = preds
-        output_df.to_csv("output.csv",index=False)
+        pred_data = pd.DataFrame.from_records(preds)
+        pred_data.columns = target_names
+        pred_df = pd.concat([output_df,pred_data],axis=1)
+        pred_df = pd.melt(pred_df, id_vars=['docid','text'], value_vars=target_names)
+        pred_df.rename(columns={'variable':'qns', 'value':'label'}, inplace=True)
+        question_answering = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+        with open('pred.json', 'w') as outfile:
+            for id in output_df['docid'].unique():
+                doc_dict = {}
+                doc_dict['docid'] = id
+                doc_dict['gold'] = {}
+                doc_dict['pred'] = {}
+                temp_df = pred_df[pred_df['docid']==id].reset_index(drop=True)
+                temp_label = test_qa[test_qa['docid']==id].reset_index(drop=True)
+                for qns in target_names:
+                    doc_dict['pred'][qns] = []
+                    doc_dict['gold'][qns] = []
+                for i in range(len(temp_df)):
+                    if temp_df.loc[i,'label']==1:
+                        qns = temp_df.loc[i,'qns']
+                        result = question_answering(question=qns, context=temp_df.loc[i,'text'])
+                        doc_dict['pred'][qns].append(result['answer'])
+                        doc_dict['pred'][qns] = list(set(doc_dict['pred'][qns]))
+                        doc_dict['gold'][qns] += list(set(temp_label.loc[temp_label['question']==qns,'text_label'].tolist()))
+                        doc_dict['gold'][qns] = list(set(doc_dict['gold'][qns]))
+                    else:
+                        continue
+                json.dump(doc_dict, outfile)
+                outfile.write('\n')
         if do_local==False:
-            task.upload_artifact("predictions", output_df)
+            task.upload_artifact("predictions", 'pred.json')
             task.close()
             
 

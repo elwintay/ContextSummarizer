@@ -3,3 +3,4 @@ lightning_logs/
 main.log
 __pycache__
 models/
+distilbert-base-cased-distilled-squad/
