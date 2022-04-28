@@ -1,10 +1,11 @@
-do_train: false
+do_train: true
 do_local: false
+train_qa: true
 epochs: 50
 gpu: 1
 data_folder: data/muc_sentence_6_fields
 save_model_folder: models/
-save_model_filename: best-summarizer
+save_model_filename: best-qa
 batch_size: 10
 workers: 12
 max_token_len: 512

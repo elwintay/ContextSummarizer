@@ -20,6 +20,7 @@ def main(cfg):
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     do_train = cfg['do_train']
     do_local = cfg['do_local']
+    train_qa = cfg['train_qa']
 
     if do_train:
 
@@ -69,70 +70,85 @@ def main(cfg):
         train = pd.read_csv("{}/train.csv".format(data_folder))
         dev = pd.read_csv("{}/dev.csv".format(data_folder))
         test = pd.read_csv("{}/test.csv".format(data_folder))
+        train_qa = pd.read_csv("{}/train_qa.csv".format(data_folder))
+        dev_qa = pd.read_csv("{}/dev_qa.csv".format(data_folder))
+        test_qa = pd.read_csv("{}/test_qa.csv".format(data_folder))
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        qa_tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
         data = MucDataModule(train, dev, test, tokenizer, workers = workers, batch_size=batch_size, max_token_len=max_token_len)
+        qa_data = QADataModule(train_qa, dev_qa, test_qa, qa_tokenizer, workers = workers, batch_size=batch_size, max_token_len=max_token_len)
 
         #model
         steps_per_epoch = len(train) // batch_size
         total_training_steps = steps_per_epoch * epochs
         model = BertTransformer("bert-base-uncased", n_warmup_steps=warmup_steps, n_training_steps=total_training_steps)
+        qa_model = QATransformer('distilbert-base-uncased', qa_tokenizer, n_warmup_steps=warmup_steps, n_training_steps=total_training_steps)
         
         #train
+        # if train_qa==False:
+        #     checkpoint_callback = ModelCheckpoint(dirpath=save_model_folder, filename=save_model_filename, save_top_k=1, verbose=True, monitor="val_loss", mode="min")
+        #     early_stopping_callback = EarlyStopping(monitor='val_loss', patience=2)
+        #     logger = TensorBoardLogger("lightning_logs", name="ContextSum")
+        #     trainer = pl.Trainer(logger = logger, checkpoint_callback=checkpoint_callback, callbacks=[early_stopping_callback], max_epochs=epochs, gpus=gpu, progress_bar_refresh_rate=1)
+        #     trainer.fit(model, data)
+        # else:
         checkpoint_callback = ModelCheckpoint(dirpath=save_model_folder, filename=save_model_filename, save_top_k=1, verbose=True, monitor="val_loss", mode="min")
         early_stopping_callback = EarlyStopping(monitor='val_loss', patience=2)
-        logger = TensorBoardLogger("lightning_logs", name="ContextSum")
+        logger = TensorBoardLogger("lightning_logs", name="ContextSumQA")
         trainer = pl.Trainer(logger = logger, checkpoint_callback=checkpoint_callback, callbacks=[early_stopping_callback], max_epochs=epochs, gpus=gpu, progress_bar_refresh_rate=1)
-        trainer.fit(model, data)
+        trainer.fit(qa_model, qa_data)
 
-        #predict
-        trainer.test(model, data)
-        results = model.test_results
-        docid = results['docid']
-        text = results['text']
-        labels =  results['labels'].squeeze().tolist()
-        preds =  torch.round(results['preds'].squeeze()).tolist()
-        target_names = ["Where is the location?","Who was the attacker?","Which organisation?","What was targeted?","Who injured or killed?","What weapon was used?"]
-        print(classification_report(labels, preds, zero_division=0, target_names=target_names))
 
-        #save predictions
-        test_qa = pd.read_csv("{}/test_qa.csv".format(data_folder))
-        test_qa['entity'] = test_qa['entity'].apply(lambda x: ast.literal_eval(x))
-        test_qa['text_label'] = test_qa['entity'].apply(lambda x: x['entity'] if x!={} else '')
-        output_df = pd.DataFrame()
-        output_df['docid'] = docid
-        output_df['text'] = text
-        pred_data = pd.DataFrame.from_records(preds)
-        pred_data.columns = target_names
-        pred_df = pd.concat([output_df,pred_data],axis=1)
-        pred_df = pd.melt(pred_df, id_vars=['docid','text'], value_vars=target_names)
-        pred_df.rename(columns={'variable':'qns', 'value':'label'}, inplace=True)
-        question_answering = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
-        with open('pred.json', 'w') as outfile:
-            for id in output_df['docid'].unique():
-                doc_dict = {}
-                doc_dict['docid'] = id
-                doc_dict['gold'] = {}
-                doc_dict['pred'] = {}
-                temp_df = pred_df[pred_df['docid']==id].reset_index(drop=True)
-                temp_label = test_qa[test_qa['docid']==id].reset_index(drop=True)
-                for qns in target_names:
-                    doc_dict['pred'][qns] = []
-                    doc_dict['gold'][qns] = []
-                for i in range(len(temp_df)):
-                    if temp_df.loc[i,'label']==1:
-                        qns = temp_df.loc[i,'qns']
-                        result = question_answering(question=qns, context=temp_df.loc[i,'text'])
-                        doc_dict['pred'][qns].append(result['answer'])
-                        doc_dict['pred'][qns] = list(set(doc_dict['pred'][qns]))
-                        doc_dict['gold'][qns] += list(set(temp_label.loc[temp_label['question']==qns,'text_label'].tolist()))
-                        doc_dict['gold'][qns] = list(set(doc_dict['gold'][qns]))
-                    else:
-                        continue
-                json.dump(doc_dict, outfile)
-                outfile.write('\n')
-        if do_local==False:
-            task.upload_artifact("predictions", 'pred.json')
-            task.close()
+
+        # #predict
+        # trainer.test(model, data)
+        # results = model.test_results
+        # docid = results['docid']
+        # text = results['text']
+        # labels =  results['labels'].squeeze().tolist()
+        # preds =  torch.round(results['preds'].squeeze()).tolist()
+        # target_names = ["Where is the location?","Who was the attacker?","Which organisation?","What was targeted?","Who injured or killed?","What weapon was used?"]
+        # print(classification_report(labels, preds, zero_division=0, target_names=target_names))
+
+        # #save predictions
+        # test_qa = pd.read_csv("{}/test_qa.csv".format(data_folder))
+        # test_qa['entity'] = test_qa['entity'].apply(lambda x: ast.literal_eval(x))
+        # test_qa['text_label'] = test_qa['entity'].apply(lambda x: x['entity'] if x!={} else '')
+        # output_df = pd.DataFrame()
+        # output_df['docid'] = docid
+        # output_df['text'] = text
+        # pred_data = pd.DataFrame.from_records(preds)
+        # pred_data.columns = target_names
+        # pred_df = pd.concat([output_df,pred_data],axis=1)
+        # pred_df = pd.melt(pred_df, id_vars=['docid','text'], value_vars=target_names)
+        # pred_df.rename(columns={'variable':'qns', 'value':'label'}, inplace=True)
+        # question_answering = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+        # with open('pred.json', 'w') as outfile:
+        #     for id in output_df['docid'].unique():
+        #         doc_dict = {}
+        #         doc_dict['docid'] = id
+        #         doc_dict['gold'] = {}
+        #         doc_dict['pred'] = {}
+        #         temp_df = pred_df[pred_df['docid']==id].reset_index(drop=True)
+        #         temp_label = test_qa[test_qa['docid']==id].reset_index(drop=True)
+        #         for qns in target_names:
+        #             doc_dict['pred'][qns] = []
+        #             doc_dict['gold'][qns] = []
+        #         for i in range(len(temp_df)):
+        #             if temp_df.loc[i,'label']==1:
+        #                 qns = temp_df.loc[i,'qns']
+        #                 result = question_answering(question=qns, context=temp_df.loc[i,'text'])
+        #                 doc_dict['pred'][qns].append(result['answer'])
+        #                 doc_dict['pred'][qns] = list(set(doc_dict['pred'][qns]))
+        #                 doc_dict['gold'][qns] += list(set(temp_label.loc[temp_label['question']==qns,'text_label'].tolist()))
+        #                 doc_dict['gold'][qns] = list(set(doc_dict['gold'][qns]))
+        #             else:
+        #                 continue
+        #         json.dump(doc_dict, outfile)
+        #         outfile.write('\n')
+        # if do_local==False:
+        #     task.upload_artifact("predictions", 'pred.json')
+        #     task.close()
 
     else:
 
