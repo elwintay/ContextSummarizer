@@ -200,7 +200,7 @@ class QATransformer(pl.LightningModule):
         f1_score_dict = {}
         for output in outputs:
             for i in range(len(output['start_pred'])):
-                qns = output["qns"].detach().cpu()[i]
+                qns = output["qns"][i]
                 if qns not in em_score_dict.keys():
                     em_score_dict[qns] = []
                     f1_score_dict[qns] = []
@@ -224,8 +224,9 @@ class QATransformer(pl.LightningModule):
                 f1_score_dict[qns].append(f1_score)
 
         for q in em_score_dict:
-            print("Exact Match Score: {}".format(np.mean(em_score_dict[q])))
-            print("F1 Score: {}".format(np.mean(f1_score_dict[q])))
+            print("----Train----")
+            print(q + "-Exact Match Score: {}".format(np.mean(em_score_dict[q])))
+            print(q + "-F1 Score: {}".format(np.mean(f1_score_dict[q])))
 
     def validation_epoch_end(self, outputs):
 
@@ -233,7 +234,7 @@ class QATransformer(pl.LightningModule):
         f1_score_dict = {}
         for output in outputs:
             for i in range(len(output['start_pred'])):
-                qns = output["qns"].detach().cpu()[i]
+                qns = output["qns"][i]
                 if qns not in em_score_dict.keys():
                     em_score_dict[qns] = []
                     f1_score_dict[qns] = []
@@ -257,44 +258,53 @@ class QATransformer(pl.LightningModule):
                 f1_score_dict[qns].append(f1_score)
 
         for q in em_score_dict:
-            print("Exact Match Score: {}".format(np.mean(em_score_dict[q])))
-            print("F1 Score: {}".format(np.mean(f1_score_dict[q])))
+            print("----Val----")
+            print(q + "-Exact Match Score: {}".format(np.mean(em_score_dict[q])))
+            print(q + "-F1 Score: {}".format(np.mean(f1_score_dict[q])))
 
     def test_epoch_end(self, outputs):
 
         em_score_dict = {}
         f1_score_dict = {}
-        for output in outputs:
-            for i in range(len(output['start_pred'])):
-                qns = output["qns"].detach().cpu()[i]
-                if qns not in em_score_dict.keys():
-                    em_score_dict[qns] = []
-                    f1_score_dict[qns] = []
-                input_ids = output["input_ids"].detach().cpu()[i]
-                start_pred = output["start_pred"].detach().cpu()[i]
-                end_pred = output["end_pred"].detach().cpu()[i]
-                label_start = output["label_start"].detach().cpu()[i]
-                label_end = output["label_end"].detach().cpu()[i]
+        with open('qa_pred.json', 'w') as outfile:
+            for output in outputs:
+                for i in range(len(output['start_pred'])):
+                    output_dict = {}
+                    qns = output["qns"][i]
+                    if qns not in em_score_dict.keys():
+                        em_score_dict[qns] = []
+                        f1_score_dict[qns] = []
+                        output_dict[qns] = []
+                    input_ids = output["input_ids"].detach().cpu()[i]
+                    start_pred = output["start_pred"].detach().cpu()[i]
+                    end_pred = output["end_pred"].detach().cpu()[i]
+                    label_start = output["label_start"].detach().cpu()[i]
+                    label_end = output["label_end"].detach().cpu()[i]
 
-                
-                label = self.tokenizer.decode(input_ids[label_start:label_end])
-                if end_pred<start_pred:
-                    pred = ""
-                else:
-                    pred = self.tokenizer.decode(input_ids[start_pred:end_pred])
-                
-                em_score = compute_exact_match(pred, label)
-                f1_score = compute_f1(pred, label)
-                
-                em_score_dict[qns].append(em_score)
-                f1_score_dict[qns].append(f1_score)
+                    
+                    label = self.tokenizer.decode(input_ids[label_start:label_end])
+                    if end_pred<start_pred:
+                        pred = ""
+                    else:
+                        pred = self.tokenizer.decode(input_ids[start_pred:end_pred])
+                    
+                    em_score = compute_exact_match(pred, label)
+                    f1_score = compute_f1(pred, label)
+                    
+                    em_score_dict[qns].append(em_score)
+                    f1_score_dict[qns].append(f1_score)
+
+                    output_dict['docid'] = output["docid"].detach().cpu()[i]
+                    output_dict['text'] = output["text"].detach().cpu()[i]
+                    output_dict[qns].append(pred)
+                    output_dict[qns] = list(set(output_dict[qns]))
+                    json.dump(output_dict, outfile)
+                    outfile.write('\n')
 
         for q in em_score_dict:
-            print("Exact Match Score: {}".format(np.mean(em_score_dict[q])))
-            print("F1 Score: {}".format(np.mean(f1_score_dict[q])))
-        # self.test_results = results
-
-        # return results
+            print("----Test----")
+            print(q + "-Exact Match Score: {}".format(np.mean(em_score_dict[q])))
+            print(q + "-F1 Score: {}".format(np.mean(f1_score_dict[q])))
 
 
     def configure_optimizers(self):

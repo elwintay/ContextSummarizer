@@ -5,9 +5,11 @@ epochs: 50
 gpu: 1
 data_folder: data/muc_sentence_6_fields
 save_model_folder: models/
-save_model_filename: best-qa
+qa_save_model_filename: best-qa
+context_save_model_filename: best-context
 batch_size: 10
 workers: 12
 max_token_len: 512
 warmup_steps: 20
-pretrained_path: s3://experiment-logging/storage/ContextSum/train.c94a50f4dcd643fcad0f7f202cbc41a1/models/epoch=3-step=1915.ckpt
+context_pretrained_path: s3://experiment-logging/storage/ContextSum/train.c94a50f4dcd643fcad0f7f202cbc41a1/models/epoch=3-step=1915.ckpt
+qa_pretrained_path: s3://experiment-logging/storage/ContextSum/train.d49abc92c0d84ae98a569d507bca3afb/models/epoch=1-step=2453.ckpt

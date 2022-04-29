@@ -108,7 +108,7 @@ hydra:
     hydra: []
     task: []
   job:
-    name: main
+    name: train_context
     override_dirname: ''
     id: ???
     num: ???
